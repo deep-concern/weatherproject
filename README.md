@@ -1,2 +1,4 @@
-# weatherproject
-A test project that fetches weather reports based on location.
+# Weather Project
+
+A project that fetches weather reports based on location.
+
