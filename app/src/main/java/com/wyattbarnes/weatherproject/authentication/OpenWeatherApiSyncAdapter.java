@@ -47,10 +47,9 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
 
     public static final int SYNC_INTERVAL = 60 * 180;
     public static final int SYNC_FLEXTIME = SYNC_INTERVAL/3;
-    private static final long DAY_IN_MILLIS = 1000 * 60 * 60 * 24;
-    private static final int WEATHER_NOTIFICATION_ID = 3004;
 
-    public static final String LOCATION_KEY = "location_key";
+    private static final String LATITUDE_KEY = "latitude_key";
+    private static final String LONGITUDE_KEY = "longitude_key";
 
     ContentResolver mContentResolver;
 
@@ -66,8 +65,8 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                               String authority,
                               ContentProviderClient provider,
                               SyncResult syncResult) {
-        double latitude = Utility.getStoredLatitude(getContext());
-        double longitude = Utility.getStoredLongitude(getContext());
+        double latitude = bundle.getDouble(LATITUDE_KEY);
+        double longitude = bundle.getDouble(LONGITUDE_KEY);
 
         // URL connection to use
         HttpURLConnection urlConnection = null;
@@ -144,19 +143,17 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
-    public static void syncImmediately(Context context) {
+    public static void syncImmediately(Context context, double latitude, double longitude) {
         Bundle bundle = new Bundle();
         bundle.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
         bundle.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+        bundle.putDouble(LATITUDE_KEY, latitude);
+        bundle.putDouble(LONGITUDE_KEY, longitude);
         ContentResolver.requestSync(
-                getSyncAccount(context),
+                getSyncAccount(context, latitude, longitude),
                 context.getString(R.string.content_authority),
                 bundle
         );
-    }
-
-    public static void initializeSyncAdapter(Context context) {
-        getSyncAccount(context);
     }
 
     private void getWeatherDataFromJson(String jsonStr) throws JSONException {
@@ -190,10 +187,6 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
 
             // Add city to db
             long cityId = addCity(cityLatitude, cityLongitude, cityName, cityCountry);
-            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getContext());
-            SharedPreferences.Editor editor = preferences.edit();
-            editor.putLong(getContext().getString(R.string.pref_city_id_key), cityId);
-            editor.commit();
 
             // Vector to store weather data
             Vector<ContentValues> contentValuesVector = new Vector<>(hourlyWeatherArray.length());
@@ -269,9 +262,9 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         Cursor cityCursor = getContext().getContentResolver().query(
                 HourlyWeatherContract.CityEntry.CONTENT_URI,
                 new String[] {HourlyWeatherContract.CityEntry._ID},
-                HourlyWeatherContract.CityEntry.COLUMN_CITY_LATITUDE + " = ? AND "
-                    + HourlyWeatherContract.CityEntry.COLUMN_CITY_LONGITUDE + " = ?",
-                new String[] {Double.toString(latitude), Double.toString(longitude)},
+                HourlyWeatherContract.CityEntry.COLUMN_CITY_NAME + " = ? AND "
+                    + HourlyWeatherContract.CityEntry.COLUMN_CITY_COUNTRY + " = ?",
+                new String[] {cityName, cityCountry},
                 null
         );
 
@@ -298,8 +291,8 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         return cityId;
     }
 
-    private static void configurePeriodicSync(Context context, int syncInterval, int flexTime) {
-        Account account = getSyncAccount(context);
+    private static void configurePeriodicSync(Context context, int syncInterval, int flexTime, double latitude, double longitude) {
+        Account account = getSyncAccount(context, latitude, longitude);
         String authority = context.getString(R.string.content_authority);
         Bundle bundle = new Bundle();
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
@@ -314,7 +307,7 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
-    private static Account getSyncAccount(Context context) {
+    private static Account getSyncAccount(Context context, double latitude, double longitude) {
         AccountManager accountManager =
                 (AccountManager) context.getSystemService(Context.ACCOUNT_SERVICE);
 
@@ -328,16 +321,16 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                 return null;
             }
 
-            onAccountCreated(newAccount, context);
+            onAccountCreated(newAccount, context, latitude, longitude);
         }
         return newAccount;
     }
 
-    private static void onAccountCreated(Account account, Context context) {
-        OpenWeatherApiSyncAdapter.configurePeriodicSync(context, SYNC_INTERVAL, SYNC_FLEXTIME);
+    private static void onAccountCreated(Account account, Context context, double latitude, double longitude) {
+        OpenWeatherApiSyncAdapter.configurePeriodicSync(context, SYNC_INTERVAL, SYNC_FLEXTIME, latitude, longitude);
 
         ContentResolver.setSyncAutomatically(account, context.getString(R.string.content_authority), true);
 
-        syncImmediately(context);
+        syncImmediately(context, latitude, longitude);
     }
 }

@@ -13,14 +13,8 @@ import java.util.GregorianCalendar;
 
 public class Utility {
     // Just setting these
-    private static final long DEFAULT_CITY_ID = -1;
     private static final float DEFAULT_LATITUDE = 37.422F;
     private static final float DEFAULT_LONGITUDE = -122.083F;
-
-    public static long getStoredCityId(Context context) {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
-        return preferences.getLong(context.getString(R.string.pref_city_id_key), DEFAULT_CITY_ID);
-    }
 
     public static double getStoredLatitude(Context context) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);

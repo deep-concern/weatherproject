@@ -1,8 +1,6 @@
 package com.wyattbarnes.weatherproject;
 
 import android.Manifest;
-import android.content.IntentSender;
-import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
 import android.database.ContentObserver;
 import android.database.Cursor;
@@ -11,7 +9,6 @@ import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.preference.PreferenceManager;
 import android.support.annotation.NonNull;
 import android.support.annotation.Nullable;
 import android.support.v4.app.ActivityCompat;
@@ -27,16 +24,9 @@ import android.widget.ListView;
 
 import com.google.android.gms.common.ConnectionResult;
 import com.google.android.gms.common.api.GoogleApiClient;
-import com.google.android.gms.common.api.PendingResult;
-import com.google.android.gms.common.api.ResultCallback;
-import com.google.android.gms.common.api.Status;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
-import com.google.android.gms.location.LocationSettingsRequest;
-import com.google.android.gms.location.LocationSettingsResult;
-import com.google.android.gms.location.LocationSettingsStates;
-import com.google.android.gms.location.LocationSettingsStatusCodes;
 import com.wyattbarnes.weatherproject.authentication.OpenWeatherApiSyncAdapter;
 import com.wyattbarnes.weatherproject.data.HourlyWeatherContract;
 
@@ -64,7 +54,7 @@ public class WeatherDetailsFragment extends Fragment implements
     private static final String LAST_UPDATE_TIME_KEY = "last_update_time_string_key";
 
     private GoogleApiClient mGoogleApiClient;
-    private String mCityName;
+    private long mCityId;
     private ListView mHourlyWeatherListView;
     private LocationRequest mLocationRequest;
     private Date mLastUpdateTime;
@@ -100,6 +90,34 @@ public class WeatherDetailsFragment extends Fragment implements
         super.onCreate(savedInstanceState);
         updateValuesFromBundle(savedInstanceState);
 
+        mContentObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
+            @Override
+            public void onChange(boolean selfChange) {
+                super.onChange(selfChange);
+                Cursor c = getContext().getContentResolver().query(
+                        HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
+                        new String[] {HourlyWeatherContract.HourlyWeatherEntry.COLUMN_CITY_KEY},
+                        null,
+                        null,
+                        HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE + " DESC "
+                );
+                if (c.moveToFirst()) {
+                    int cityIdIndex = c.getColumnIndex(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_CITY_KEY);
+                    WeatherDetailsFragment.this.mCityId = c.getLong(cityIdIndex);
+                } else {
+                    WeatherDetailsFragment.this.mCityId = -1;
+                }
+
+                WeatherDetailsFragment.this.getLoaderManager().restartLoader(WeatherDetailsFragment.HOURLY_WEATHER_LOADER, null, WeatherDetailsFragment.this);
+            }
+        };
+
+        getContext().getContentResolver().registerContentObserver(
+                HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
+                true,
+                mContentObserver
+        );
+
         // Get permissions for checking location
         if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
@@ -108,25 +126,7 @@ public class WeatherDetailsFragment extends Fragment implements
                     Manifest.permission.ACCESS_FINE_LOCATION
             };
             ActivityCompat.requestPermissions(getActivity(), permissions, LOCATION_PERMISSIONS_REQUEST);
-        } else {
-            OpenWeatherApiSyncAdapter.initializeSyncAdapter(getContext());
         }
-
-        /*mContentObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
-            @Override
-            public void onChange(boolean selfChange, Uri uri) {
-                super.onChange(selfChange, uri);
-                if (uri != null) {
-                    mCityName = null; // HourlyWeatherContract.CityEntry.getCityNameFromUri(uri);
-                }
-            }
-        }
-
-        getContext().getContentResolver().registerContentObserver(
-                HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
-                true,
-                mContentObserver
-        );*/
     }
 
     @Override
@@ -227,7 +227,6 @@ public class WeatherDetailsFragment extends Fragment implements
         switch (requestCode) {
             case LOCATION_PERMISSIONS_REQUEST:
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
-                    OpenWeatherApiSyncAdapter.initializeSyncAdapter(getContext());
                     startLocationUpdates();
                 }
                 return;
@@ -238,24 +237,15 @@ public class WeatherDetailsFragment extends Fragment implements
 
     @Override
     public void onLocationChanged(Location location) {
-        SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getContext());
-        SharedPreferences.Editor editor = preferences.edit();
-
-        editor.putFloat(getString(R.string.pref_latitude_key), (float) location.getLatitude());
-        editor.putFloat(getString(R.string.pref_longitude_key), (float) location.getLongitude());
-        editor.apply();
-
         mLastUpdateTime = new Date();
-        OpenWeatherApiSyncAdapter.syncImmediately(getContext());
-        getLoaderManager().restartLoader(HOURLY_WEATHER_LOADER, null, this);
+        OpenWeatherApiSyncAdapter.syncImmediately(getContext(), location.getLatitude(), location.getLongitude());
     }
 
     @Override
     public Loader<Cursor> onCreateLoader(int id, Bundle args) {
         String sortOrder = HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE + " ASC";
-        long cityId = Utility.getStoredCityId(getContext());
         Uri uri = HourlyWeatherContract.HourlyWeatherEntry.buildHourlyWeatherWithCityIdAndStartDate(
-                cityId,
+                mCityId,
                 System.currentTimeMillis()
         );
         return new CursorLoader(getContext(),
@@ -353,42 +343,6 @@ public class WeatherDetailsFragment extends Fragment implements
                 .addApi(LocationServices.API)
                 .build();
         mGoogleApiClient.connect();
-    }
-
-    private void getCurrentLocationSettings() {
-        if (mLocationRequest == null) {
-            return;
-        }
-
-        LocationSettingsRequest.Builder builder = new LocationSettingsRequest.Builder()
-                .addLocationRequest(mLocationRequest);
-        final PendingResult<LocationSettingsResult> result =
-                LocationServices.SettingsApi.checkLocationSettings(mGoogleApiClient, builder.build());
-        result.setResultCallback(new ResultCallback<LocationSettingsResult>() {
-            @Override
-            public void onResult(@NonNull LocationSettingsResult locationSettingsResult) {
-                final Status status = locationSettingsResult.getStatus();
-                final LocationSettingsStates states =
-                        locationSettingsResult.getLocationSettingsStates();
-
-                switch (status.getStatusCode()) {
-                    case LocationSettingsStatusCodes.SUCCESS:
-                        // TODO:
-                        break;
-                    case LocationSettingsStatusCodes.RESOLUTION_REQUIRED:
-                        try {
-                            status.startResolutionForResult(WeatherDetailsFragment.this.getActivity(),
-                                    REQUEST_CHECK_SETTINGS);
-                        } catch (IntentSender.SendIntentException e) {
-                            // Ignore
-                        }
-                        break;
-                    case LocationSettingsStatusCodes.SETTINGS_CHANGE_UNAVAILABLE:
-                        // TODO
-                        break;
-                }
-            }
-        });
     }
 
     private enum State {
