@@ -13,9 +13,8 @@ import android.support.annotation.Nullable;
 import java.text.DecimalFormat;
 
 /**
- * Created by wyatt.barnes on 2016/10/31.
+ * Main content provider for hourly weather updates per city.
  */
-
 public class HourlyWeatherProvider extends ContentProvider {
     private static final UriMatcher sUriMatcher = buildUriMatcher();
     private static final String LOG_TAG = HourlyWeatherProvider.class.getSimpleName();

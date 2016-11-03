@@ -9,9 +9,8 @@ import android.view.ViewGroup;
 import android.widget.TextView;
 
 /**
- * Created by wyatt.barnes on 2016/11/01.
+ * CursorAdapter subclass for populating our list.
  */
-
 public class WeatherDetailsAdapter extends CursorAdapter {
     private static final int VIEW_TYPE_WEATHER_WITH_LOCATION = 0;
     private static final int VIEW_TYPE_WEATHER_ONLY = 1;

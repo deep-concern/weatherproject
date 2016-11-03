@@ -8,20 +8,16 @@ import android.content.ContentResolver;
 import android.content.ContentUris;
 import android.content.ContentValues;
 import android.content.Context;
-import android.content.SharedPreferences;
 import android.content.SyncRequest;
 import android.content.SyncResult;
 import android.database.Cursor;
 import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
-import android.preference.PreferenceManager;
-import android.text.format.Time;
 import android.util.Log;
 
 import com.wyattbarnes.weatherproject.BuildConfig;
 import com.wyattbarnes.weatherproject.R;
-import com.wyattbarnes.weatherproject.Utility;
 import com.wyattbarnes.weatherproject.data.HourlyWeatherContract;
 
 import org.json.JSONArray;
@@ -34,26 +30,33 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.text.SimpleDateFormat;
-import java.util.GregorianCalendar;
 import java.util.Vector;
 
 /**
- * Created by wyatt.barnes on 2016/10/31.
+ * SyncAdapter subclass for querying OWM API.
+ *
+ * Allows us to have updated information (currently set to hourly only).
  */
+public class OpenWeatherMapApiSyncAdapter extends AbstractThreadedSyncAdapter {
+    private static final String LOG_TAG = OpenWeatherMapApiSyncAdapter.class.getSimpleName();
 
-public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
-    private static final String LOG_TAG = OpenWeatherApiSyncAdapter.class.getSimpleName();
-
+    // Intervals to run at
     public static final int SYNC_INTERVAL = 60 * 180;
     public static final int SYNC_FLEXTIME = SYNC_INTERVAL/3;
 
+    // Keys for storing items in bundles
     private static final String LATITUDE_KEY = "latitude_key";
     private static final String LONGITUDE_KEY = "longitude_key";
 
     ContentResolver mContentResolver;
 
-    public OpenWeatherApiSyncAdapter(Context context, boolean autoInitialize) {
+    /**
+     * Constructor.
+     *
+     * @param context - The request from which we get a content resolver.
+     * @param autoInitialize - Auto initialization boolean.
+     */
+    public OpenWeatherMapApiSyncAdapter(Context context, boolean autoInitialize) {
         super(context, autoInitialize);
 
         mContentResolver = context.getContentResolver();
@@ -65,6 +68,7 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                               String authority,
                               ContentProviderClient provider,
                               SyncResult syncResult) {
+        // Get stored values to use in query (in this case, coords)
         double latitude = bundle.getDouble(LATITUDE_KEY);
         double longitude = bundle.getDouble(LONGITUDE_KEY);
 
@@ -75,6 +79,8 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         // Data
         String jsonStr = null;
 
+        // TODO: Move this to options
+        // Some hard coded values
         String units = "metric";
         
         try {
@@ -94,6 +100,8 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                     .build();
 
             URL url = new URL(builtUri.toString());
+
+            // For debugging purposes
             Log.d(LOG_TAG, "Query url: " + url);
 
             // Query
@@ -105,6 +113,7 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
             InputStream in = urlConnection.getInputStream();
             StringBuffer buffer = new StringBuffer();
 
+            // Return if nothing
             if (in == null) {
                 return;
             }
@@ -118,15 +127,15 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                 buffer.append(line + "\n");
             }
 
+            // Nothing received
             if (buffer.length() == 0) {
                 return;
             }
 
             jsonStr = buffer.toString();
             getWeatherDataFromJson(jsonStr);
-        } catch (IOException e) {
-            Log.e(LOG_TAG, "Error ", e);
-        } catch (JSONException e) {
+        } catch (IOException|JSONException e) {
+            // TODO: Handle this in a user friendly way
             Log.e(LOG_TAG, "Error ", e);
         } finally {
             if (urlConnection != null) {
@@ -143,6 +152,14 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
+    /**
+     * Basic function for activity to call to get most recent data. Will initialize Sync Adapter
+     * if none exists, and then will force an info update from query.
+     *
+     * @param context
+     * @param latitude
+     * @param longitude
+     */
     public static void syncImmediately(Context context, double latitude, double longitude) {
         Bundle bundle = new Bundle();
         bundle.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
@@ -156,6 +173,12 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         );
     }
 
+    /**
+     * Helper function for parsing JSON.
+     *
+     * @param jsonStr
+     * @throws JSONException
+     */
     private void getWeatherDataFromJson(String jsonStr) throws JSONException {
         final String CITY = "city";
         final String CITY_NAME = "name";
@@ -214,8 +237,8 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                 maxTemp = mainJson.getDouble(LIST_ITEM_MAIN_TEMP_MAX);
                 minTemp = mainJson.getDouble(LIST_ITEM_MAIN_TEMP_MIN);
 
+                // Push values
                 ContentValues weatherValues = new ContentValues();
-
                 weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_CITY_KEY,
                         cityId);
                 weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE,
@@ -228,7 +251,6 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
                         maxTemp);
                 weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_TEMP_MIN,
                         minTemp);
-
                 contentValuesVector.add(weatherValues);
             }
 
@@ -256,6 +278,15 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
+    /**
+     * Helper function for adding cities to their own table.
+     *
+     * @param latitude
+     * @param longitude
+     * @param cityName
+     * @param cityCountry
+     * @return ID of the (new) city.
+     */
     private long addCity(double latitude, double longitude, String cityName, String cityCountry) {
         long cityId;
 
@@ -291,6 +322,15 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         return cityId;
     }
 
+    /**
+     * Helper function for configuring periodic syncs.
+     *
+     * @param context
+     * @param syncInterval
+     * @param flexTime
+     * @param latitude
+     * @param longitude
+     */
     private static void configurePeriodicSync(Context context, int syncInterval, int flexTime, double latitude, double longitude) {
         Account account = getSyncAccount(context, latitude, longitude);
         String authority = context.getString(R.string.content_authority);
@@ -307,6 +347,14 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
+    /**
+     * Helper function for creating/getting the account for syncing.
+     *
+     * @param context
+     * @param latitude
+     * @param longitude
+     * @return
+     */
     private static Account getSyncAccount(Context context, double latitude, double longitude) {
         AccountManager accountManager =
                 (AccountManager) context.getSystemService(Context.ACCOUNT_SERVICE);
@@ -326,8 +374,16 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         return newAccount;
     }
 
+    /**
+     * Callback for newly created accounts.
+     *
+     * @param account
+     * @param context
+     * @param latitude
+     * @param longitude
+     */
     private static void onAccountCreated(Account account, Context context, double latitude, double longitude) {
-        OpenWeatherApiSyncAdapter.configurePeriodicSync(context, SYNC_INTERVAL, SYNC_FLEXTIME, latitude, longitude);
+        OpenWeatherMapApiSyncAdapter.configurePeriodicSync(context, SYNC_INTERVAL, SYNC_FLEXTIME, latitude, longitude);
 
         ContentResolver.setSyncAutomatically(account, context.getString(R.string.content_authority), true);
 

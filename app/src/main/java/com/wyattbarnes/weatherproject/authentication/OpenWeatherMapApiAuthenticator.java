@@ -8,11 +8,11 @@ import android.content.Context;
 import android.os.Bundle;
 
 /**
- * Created by wyatt.barnes on 2016/10/31.
+ * Dummy authenticator.
  */
-public class OpenWeatherApiAuthenticator extends AbstractAccountAuthenticator {
+public class OpenWeatherMapApiAuthenticator extends AbstractAccountAuthenticator {
 
-    public OpenWeatherApiAuthenticator(Context context) {
+    public OpenWeatherMapApiAuthenticator(Context context) {
         super(context);
     }
 

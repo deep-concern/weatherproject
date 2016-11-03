@@ -27,15 +27,13 @@ import com.google.android.gms.common.api.GoogleApiClient;
 import com.google.android.gms.location.LocationListener;
 import com.google.android.gms.location.LocationRequest;
 import com.google.android.gms.location.LocationServices;
-import com.wyattbarnes.weatherproject.authentication.OpenWeatherApiSyncAdapter;
+import com.wyattbarnes.weatherproject.authentication.OpenWeatherMapApiSyncAdapter;
 import com.wyattbarnes.weatherproject.data.HourlyWeatherContract;
 
 import java.util.Date;
 
-// TODO: refactor to cleanly and consistently get location
-// TODO: consider best practice for getting location (maybe move to a background task?)
 /**
- * Created by wyatt.barnes on 2016/10/26.
+ * Main activity's fragment. Displays the main UI parts.
  */
 public class WeatherDetailsFragment extends Fragment implements
         LoaderManager.LoaderCallbacks<Cursor>,
@@ -55,14 +53,18 @@ public class WeatherDetailsFragment extends Fragment implements
 
     private GoogleApiClient mGoogleApiClient;
     private long mCityId;
+    // TODO: make into local var?
     private ListView mHourlyWeatherListView;
+    // TODO: make into local var?
     private LocationRequest mLocationRequest;
+    // TODO: remove if not needed
     private Date mLastUpdateTime;
     private boolean mRequestingLocationUpdates;
     private State mCurrentState;
     private WeatherDetailsAdapter mAdapter;
     private ContentObserver mContentObserver;
 
+    // These rows and columns are what we'll be getting from each query to the cursor adapter.
     private static final String[] HOURLY_WEATHER_COLUMNS = {
             HourlyWeatherContract.HourlyWeatherEntry.TABLE_NAME + "." + HourlyWeatherContract.HourlyWeatherEntry._ID,
             HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE,
@@ -75,6 +77,7 @@ public class WeatherDetailsFragment extends Fragment implements
             HourlyWeatherContract.CityEntry.COLUMN_CITY_COUNTRY
     };
 
+    // UPDATE THE ORDER IF THE ABOVE ARRAY CHANGES
     public static final int COLUMN_HOURLY_WEATHER_ID = 0;
     public static final int COLUMN_HOURLY_WEATHER_DATE = 1;
     public static final int COLUMN_HOURLY_WEATHER_DESCRIPTION = 2;
@@ -90,10 +93,13 @@ public class WeatherDetailsFragment extends Fragment implements
         super.onCreate(savedInstanceState);
         updateValuesFromBundle(savedInstanceState);
 
+        // Content observer to listen to changes from our sync adapter
         mContentObserver = new ContentObserver(new Handler(Looper.getMainLooper())) {
             @Override
             public void onChange(boolean selfChange) {
                 super.onChange(selfChange);
+
+                // Getting the newly added city ID for reasons
                 Cursor c = getContext().getContentResolver().query(
                         HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
                         new String[] {HourlyWeatherContract.HourlyWeatherEntry.COLUMN_CITY_KEY},
@@ -108,10 +114,12 @@ public class WeatherDetailsFragment extends Fragment implements
                     WeatherDetailsFragment.this.mCityId = -1;
                 }
 
+                // Restart our cursor loader to fetch new data
                 WeatherDetailsFragment.this.getLoaderManager().restartLoader(WeatherDetailsFragment.HOURLY_WEATHER_LOADER, null, WeatherDetailsFragment.this);
             }
         };
 
+        // Regestering our content observer
         getContext().getContentResolver().registerContentObserver(
                 HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
                 true,
@@ -121,6 +129,7 @@ public class WeatherDetailsFragment extends Fragment implements
         // Get permissions for checking location
         if (ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_FINE_LOCATION) != PackageManager.PERMISSION_GRANTED
                 && ActivityCompat.checkSelfPermission(getActivity(), Manifest.permission.ACCESS_COARSE_LOCATION) != PackageManager.PERMISSION_GRANTED) {
+            // Failed, so we need to request permissions
             String[] permissions = {
                     Manifest.permission.ACCESS_COARSE_LOCATION,
                     Manifest.permission.ACCESS_FINE_LOCATION
@@ -146,6 +155,7 @@ public class WeatherDetailsFragment extends Fragment implements
 
         View rootView = inflater.inflate(R.layout.fragment_weather_details, container, false);
 
+        // Get list and attach adapter
         mHourlyWeatherListView = (ListView) rootView.findViewById(R.id.hourlyweather_listview);
         mHourlyWeatherListView.setAdapter(mAdapter);
 
@@ -156,6 +166,7 @@ public class WeatherDetailsFragment extends Fragment implements
 
     @Override
     public void onActivityCreated(@Nullable Bundle savedInstanceState) {
+        // Initialize our loader for our adapters
         getLoaderManager().initLoader(HOURLY_WEATHER_LOADER, null, this);
         super.onActivityCreated(savedInstanceState);
     }
@@ -163,6 +174,8 @@ public class WeatherDetailsFragment extends Fragment implements
     @Override
     public void onStart() {
         super.onStart();
+
+        // Connect if we can
         if (mGoogleApiClient != null) {
             mGoogleApiClient.connect();
         }
@@ -171,18 +184,24 @@ public class WeatherDetailsFragment extends Fragment implements
     @Override
     public void onResume() {
         super.onResume();
+
+        // Start looking for location updates
         startLocationUpdates();
     }
 
     @Override
     public void onPause() {
         super.onPause();
+
+        // Get ready for activity to go bye bye and turn of updates
         stopLocationUpdates();
     }
 
     @Override
     public void onStop() {
         super.onStop();
+
+        // Disconnect
         if (mGoogleApiClient != null) {
             mGoogleApiClient.disconnect();
         }
@@ -191,6 +210,8 @@ public class WeatherDetailsFragment extends Fragment implements
     @Override
     public void onDestroy() {
         super.onDestroy();
+
+        // For now, unregister content observer
         if (mContentObserver != null) {
             getContext().getContentResolver().unregisterContentObserver(mContentObserver);
         }
@@ -227,6 +248,7 @@ public class WeatherDetailsFragment extends Fragment implements
         switch (requestCode) {
             case LOCATION_PERMISSIONS_REQUEST:
                 if (grantResults.length > 0 && grantResults[0] == PackageManager.PERMISSION_GRANTED) {
+                    // Since we have permission, start listening for location updates
                     startLocationUpdates();
                 }
                 return;
@@ -238,7 +260,9 @@ public class WeatherDetailsFragment extends Fragment implements
     @Override
     public void onLocationChanged(Location location) {
         mLastUpdateTime = new Date();
-        OpenWeatherApiSyncAdapter.syncImmediately(getContext(), location.getLatitude(), location.getLongitude());
+
+        // Force new info to be added (since our location changed, our weather info may be different)
+        OpenWeatherMapApiSyncAdapter.syncImmediately(getContext(), location.getLatitude(), location.getLongitude());
     }
 
     @Override
@@ -282,20 +306,22 @@ public class WeatherDetailsFragment extends Fragment implements
     private void startLocationUpdates() {
         mCurrentState = State.STARTING_UPDATES;
 
+        // Don't run this if we're already checking
         if (mRequestingLocationUpdates) {
             return;
         }
 
+        // We need to be connected, so connect to google api if we haven't
         if (mGoogleApiClient == null) {
             connectGoogleApiClient();
             return;
         }
-
         if (!mGoogleApiClient.isConnected()) {
             mGoogleApiClient.connect();
             return;
         }
 
+        // Basic location request to send
         mLocationRequest = new LocationRequest()
                 .setInterval(10000)
                 .setFastestInterval(5000)
@@ -312,21 +338,23 @@ public class WeatherDetailsFragment extends Fragment implements
 
     private void stopLocationUpdates() {
         mCurrentState = State.STOPING_UPDATES;
+        // Already ran this, so quit
         if (!mRequestingLocationUpdates) {
             return;
         }
 
+        // Disconnect from google api if needed
         if (mGoogleApiClient == null) {
             connectGoogleApiClient();
             return;
         }
-
         if (!mGoogleApiClient.isConnected()) {
             mGoogleApiClient.connect();
             return;
         }
 
         try {
+            // Stop checking location
             LocationServices.FusedLocationApi.removeLocationUpdates(mGoogleApiClient, this);
             mRequestingLocationUpdates = false;
         } catch (SecurityException e) {

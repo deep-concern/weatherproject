@@ -8,14 +8,14 @@ import java.text.SimpleDateFormat;
 import java.util.GregorianCalendar;
 
 /**
- * Created by wyatt.barnes on 2016/11/01.
+ * Utility function class.
  */
-
 public class Utility {
     // Just setting these
     private static final float DEFAULT_LATITUDE = 37.422F;
     private static final float DEFAULT_LONGITUDE = -122.083F;
 
+    // TODO: consider removing
     public static double getStoredLatitude(Context context) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         return (double) preferences.getFloat(
@@ -24,6 +24,7 @@ public class Utility {
         );
     }
 
+    // TODO: consider removing
     public static double getStoredLongitude(Context context) {
         SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(context);
         return (double) preferences.getFloat(
@@ -32,6 +33,12 @@ public class Utility {
         );
     }
 
+    /**
+     * Formats the date into an easier to read format.
+     *
+     * @param date
+     * @return
+     */
     public static String formatDate(long date) {
         GregorianCalendar calendar = new GregorianCalendar();
         calendar.setTimeInMillis(date);

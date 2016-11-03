@@ -34,7 +34,7 @@
             android:exported="false"
             android:syncable="true"/>
 
-        <service android:name=".authentication.OpenWeatherApiAuthenticatorService">
+        <service android:name=".authentication.OpenWeatherMapApiAuthenticatorService">
             <intent-filter>
                 <action android:name="android.accounts.AccountAuthenticator"/>
             </intent-filter>
@@ -42,7 +42,7 @@
                 android:resource="@xml/authenticator" />
         </service>
 
-        <service android:name=".authentication.OpenWeatherApiSyncService"
+        <service android:name=".authentication.OpenWeatherMapApiSyncService"
             android:exported="true">
             <intent-filter>
                 <action android:name="android.content.SyncAdapter"/>

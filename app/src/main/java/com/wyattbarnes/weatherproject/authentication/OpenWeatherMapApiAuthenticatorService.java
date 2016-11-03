@@ -6,15 +6,15 @@ import android.os.IBinder;
 import android.support.annotation.Nullable;
 
 /**
- * Created by wyatt.barnes on 2016/11/01.
+ * Dummy authenticator service.
  */
 
-public class OpenWeatherApiAuthenticatorService extends Service {
-    private OpenWeatherApiAuthenticator mAuthenticator;
+public class OpenWeatherMapApiAuthenticatorService extends Service {
+    private OpenWeatherMapApiAuthenticator mAuthenticator;
 
     @Override
     public void onCreate() {
-        mAuthenticator = new OpenWeatherApiAuthenticator(this);
+        mAuthenticator = new OpenWeatherMapApiAuthenticator(this);
     }
 
     @Nullable

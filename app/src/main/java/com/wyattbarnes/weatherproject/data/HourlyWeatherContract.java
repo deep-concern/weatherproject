@@ -8,16 +8,19 @@ import android.provider.BaseColumns;
 import java.util.Calendar;
 
 /**
- * Created by wyatt.barnes on 2016/10/31.
+ * Contract describing the column names and content URIs.
  */
-
 public class HourlyWeatherContract {
     public static final String CONTENT_AUTHORITY = "com.wyattbarnes.weatherproject";
     public static final Uri BASE_CONTENT_URI = Uri.parse("content://" + CONTENT_AUTHORITY);
 
+    // Content URI paths
     public static final String PATH_CITY = "city";
     public static final String PATH_HOURLY_WEATHER = "hourlyweather";
 
+    /**
+     * City contract for table columns and content URIs.
+     */
     public static final class CityEntry implements BaseColumns {
         private static final String LOG_TAG = CityEntry.class.getSimpleName();
 
@@ -43,6 +46,9 @@ public class HourlyWeatherContract {
         }
     }
 
+    /**
+     * Hourly weather contract for columns and content URIs.
+     */
     public static final class HourlyWeatherEntry implements BaseColumns {
         private static final String LOG_TAG = HourlyWeatherEntry.class.getSimpleName();
 
@@ -69,12 +75,14 @@ public class HourlyWeatherContract {
             return ContentUris.withAppendedId(CONTENT_URI, id);
         }
 
+        // TODO: consider usage
         public static Uri buildHourlyWeatherWithCityId(long cityId) {
             return CONTENT_URI.buildUpon()
                     .appendPath(Long.toString(cityId))
                     .build();
         }
 
+        // TODO: consider usage
         public static Uri buildHourlyWeatherWithCityIdAndDate(long cityId, long startDate) {
             return CONTENT_URI.buildUpon()
                     .appendPath(Long.toString(cityId))
@@ -82,6 +90,13 @@ public class HourlyWeatherContract {
                     .build();
         }
 
+        /**
+         * Builds a content URI with a city ID and start date.
+         *
+         * @param cityId
+         * @param startDate
+         * @return
+         */
         public static Uri buildHourlyWeatherWithCityIdAndStartDate(long cityId, long startDate) {
             return CONTENT_URI.buildUpon()
                     .appendPath(Long.toString(cityId))
@@ -90,14 +105,34 @@ public class HourlyWeatherContract {
 
         }
 
+        /**
+         * Helper function for getting city ID from URI.
+         *
+         * @param uri
+         * @return
+         */
         public static Long getCityIdFromUri(Uri uri) {
             return Long.parseLong(uri.getPathSegments().get(1));
         }
 
+
+        /**
+         * Helper function for getting date in milliseconds from URI.
+         *
+         * @param uri
+         * @return
+         */
         public static long getDateFromUri(Uri uri) {
             return Long.parseLong(uri.getPathSegments().get(3));
         }
 
+
+        /**
+         * Helper function for getting start date in milliseconds from URI.
+         *
+         * @param uri
+         * @return
+         */
         public static long getStartDateFromUri(Uri uri) {
             String dateString = uri.getQueryParameter(COLUMN_DATE);
             if (null != dateString && !dateString.isEmpty()) {
@@ -108,6 +143,13 @@ public class HourlyWeatherContract {
         }
     }
 
+    // TODO: consider usage
+    /**
+     * Helper function for normalizing dates. Trims the minutes and seconds so we get hourly dates.
+     *
+     * @param startDate
+     * @return
+     */
     static long normalizeDate(long startDate) {
         Calendar calendar = Calendar.getInstance();
         calendar.setTimeInMillis(startDate);

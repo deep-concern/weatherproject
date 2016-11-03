@@ -29,6 +29,7 @@ public class HourlyWeatherOpenHelper extends SQLiteOpenHelper {
                 + HourlyWeatherContract.CityEntry.COLUMN_CITY_LONGITUDE + " REAL NOT NULL "
                 + " )";
 
+        // SQL script for creating our hourly weather table
         final String SQL_CREATE_HOURLY_WEATHER_TABLE = "CREATE TABLE "
                 + HourlyWeatherContract.HourlyWeatherEntry.TABLE_NAME + " ("
                 + HourlyWeatherContract.HourlyWeatherEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
