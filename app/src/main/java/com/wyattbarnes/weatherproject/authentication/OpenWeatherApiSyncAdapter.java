@@ -1,15 +1,28 @@
 package com.wyattbarnes.weatherproject.authentication;
 
 import android.accounts.Account;
+import android.accounts.AccountManager;
 import android.content.AbstractThreadedSyncAdapter;
 import android.content.ContentProviderClient;
 import android.content.ContentResolver;
+import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.Context;
+import android.content.SharedPreferences;
+import android.content.SyncRequest;
 import android.content.SyncResult;
-import android.location.Location;
+import android.database.Cursor;
 import android.net.Uri;
+import android.os.Build;
 import android.os.Bundle;
+import android.preference.PreferenceManager;
+import android.text.format.Time;
 import android.util.Log;
+
+import com.wyattbarnes.weatherproject.BuildConfig;
+import com.wyattbarnes.weatherproject.R;
+import com.wyattbarnes.weatherproject.Utility;
+import com.wyattbarnes.weatherproject.data.HourlyWeatherContract;
 
 import org.json.JSONArray;
 import org.json.JSONException;
@@ -21,9 +34,9 @@ import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.net.HttpURLConnection;
 import java.net.URL;
-import java.util.ArrayList;
-import java.util.Date;
-import java.util.List;
+import java.text.SimpleDateFormat;
+import java.util.GregorianCalendar;
+import java.util.Vector;
 
 /**
  * Created by wyatt.barnes on 2016/10/31.
@@ -31,6 +44,14 @@ import java.util.List;
 
 public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
     private static final String LOG_TAG = OpenWeatherApiSyncAdapter.class.getSimpleName();
+
+    public static final int SYNC_INTERVAL = 60 * 180;
+    public static final int SYNC_FLEXTIME = SYNC_INTERVAL/3;
+    private static final long DAY_IN_MILLIS = 1000 * 60 * 60 * 24;
+    private static final int WEATHER_NOTIFICATION_ID = 3004;
+
+    public static final String LOCATION_KEY = "location_key";
+
     ContentResolver mContentResolver;
 
     public OpenWeatherApiSyncAdapter(Context context, boolean autoInitialize) {
@@ -42,15 +63,11 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
     @Override
     public void onPerformSync(Account account,
                               Bundle bundle,
-                              String s,
-                              ContentProviderClient contentProviderClient,
+                              String authority,
+                              ContentProviderClient provider,
                               SyncResult syncResult) {
-        Location location = null;
-        
-        // Nothing is set, so just quit
-        if (location == null) {
-            return;
-        }
+        double latitude = Utility.getStoredLatitude(getContext());
+        double longitude = Utility.getStoredLongitude(getContext());
 
         // URL connection to use
         HttpURLConnection urlConnection = null;
@@ -71,9 +88,10 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
 
             // Build URI using the current location and settings
             Uri builtUri = Uri.parse(BASE_URL).buildUpon()
-                    .appendQueryParameter(LATITUDE_PARAM, Double.toString(location.getLatitude()))
-                    .appendQueryParameter(LONGITUDE_PARAM, Double.toString(location.getLongitude()))
+                    .appendQueryParameter(LATITUDE_PARAM, Double.toString(latitude))
+                    .appendQueryParameter(LONGITUDE_PARAM, Double.toString(longitude))
                     .appendQueryParameter(UNITS_PARAM, units)
+                    .appendQueryParameter(APPID_PARAM, BuildConfig.OPEN_WEATHER_MAP_API_KEY)
                     .build();
 
             URL url = new URL(builtUri.toString());
@@ -106,7 +124,7 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
             }
 
             jsonStr = buffer.toString();
-            getWeatherDataFromJson(jsonStr, location);
+            getWeatherDataFromJson(jsonStr);
         } catch (IOException e) {
             Log.e(LOG_TAG, "Error ", e);
         } catch (JSONException e) {
@@ -126,69 +144,200 @@ public class OpenWeatherApiSyncAdapter extends AbstractThreadedSyncAdapter {
         }
     }
 
-    private void getWeatherDataFromJson(String jsonStr, Location location) throws JSONException {
+    public static void syncImmediately(Context context) {
+        Bundle bundle = new Bundle();
+        bundle.putBoolean(ContentResolver.SYNC_EXTRAS_EXPEDITED, true);
+        bundle.putBoolean(ContentResolver.SYNC_EXTRAS_MANUAL, true);
+        ContentResolver.requestSync(
+                getSyncAccount(context),
+                context.getString(R.string.content_authority),
+                bundle
+        );
+    }
+
+    public static void initializeSyncAdapter(Context context) {
+        getSyncAccount(context);
+    }
+
+    private void getWeatherDataFromJson(String jsonStr) throws JSONException {
         final String CITY = "city";
-        final String CITY_ID = "id";
         final String CITY_NAME = "name";
-        final String COORDINATES = "coord";
-        final String COORDINATES_LATITUDE = "lat";
-        final String COORDINATES_LONGITUDE = "lat";
-        final String COUNTRY = "country";
-        final String CONDITION = "cod";
-        final String MESSAGE = "message";
-        final String COUNT = "cnt";
+        final String CITY_COUNTRY = "country";
+        final String CITY_COORDINATES = "coord";
+        final String CITY_COORDINATES_LATITUDE = "lat";
+        final String CITY_COORDINATES_LONGITUDE = "lat";
         final String LIST = "list";
-        final String LIST_ITEM_TIME = "dt";
+        final String LIST_ITEM_DATETIME = "dt";
         final String LIST_ITEM_MAIN = "main";
-        final String LIST_ITEM_MAIN_TEMP = "temp";
         final String LIST_ITEM_MAIN_TEMP_MIN = "temp_min";
         final String LIST_ITEM_MAIN_TEMP_MAX = "temp_max";
         final String LIST_ITEM_WEATHER = "weather";
         final String LIST_ITEM_WEATHER_ID = "id";
-        final String LIST_ITEM_WEATHER_MAIN = "main";
         final String LIST_ITEM_WEATHER_DESCRIPTION = "description";
-        final String LIST_ITEM_WEATHER_ICON = "icon";
-        final String LIST_ITEM_TIME_TEXT = "dt_txt";
 
         try {
             // Parse response
-            JSONObject weatherJson = new JSONObject(jsonStr);
+            JSONObject hourlyWeatherJson = new JSONObject(jsonStr);
+            JSONArray hourlyWeatherArray = hourlyWeatherJson.getJSONArray(LIST);
 
             // Parse city information
-            JSONObject cityJson = weatherJson.getJSONObject(CITY);
-            City city = new City();
-            city.id = cityJson.getInt(CITY_ID);
-            city.name = cityJson.getString(CITY_NAME);
+            JSONObject cityJson = hourlyWeatherJson.getJSONObject(CITY);
+            String cityName = cityJson.getString(CITY_NAME);
+            String cityCountry = cityJson.getString(CITY_COUNTRY);
+            JSONObject cityCoordinates = cityJson.getJSONObject(CITY_COORDINATES);
+            double cityLatitude = cityCoordinates.getDouble(CITY_COORDINATES_LATITUDE);
+            double cityLongitude = cityCoordinates.getDouble(CITY_COORDINATES_LONGITUDE);
 
-            // Get hourly weather
-            JSONArray listJson = weatherJson.getJSONArray(LIST);
-            List<HourlyWeather> forecast = new ArrayList<>();
+            // Add city to db
+            long cityId = addCity(cityLatitude, cityLongitude, cityName, cityCountry);
+            SharedPreferences preferences = PreferenceManager.getDefaultSharedPreferences(getContext());
+            SharedPreferences.Editor editor = preferences.edit();
+            editor.putLong(getContext().getString(R.string.pref_city_id_key), cityId);
+            editor.commit();
 
-            for (int i = 0; i < listJson.length(); i++) {
-                HourlyWeather weather = new HourlyWeather();
-                ti
+            // Vector to store weather data
+            Vector<ContentValues> contentValuesVector = new Vector<>(hourlyWeatherArray.length());
+
+            for (int i = 0; i < hourlyWeatherArray.length(); i++) {
+                long date;
+                int weatherId;
+                String weatherDescription;
+                double maxTemp;
+                double minTemp;
+
+                JSONObject hourlyJson = hourlyWeatherArray.getJSONObject(i);
+
+                // Hourly date
+                date = hourlyJson.getLong(LIST_ITEM_DATETIME) * 1000L;
+
+                // Get weather data
+                JSONArray weatherArray = hourlyJson.getJSONArray(LIST_ITEM_WEATHER);
+                JSONObject weatherJson = weatherArray.getJSONObject(0);
+                weatherId = weatherJson.getInt(LIST_ITEM_WEATHER_ID);
+                weatherDescription = weatherJson.getString(LIST_ITEM_WEATHER_DESCRIPTION);
+
+                // Tempurature
+                JSONObject mainJson = hourlyJson.getJSONObject(LIST_ITEM_MAIN);
+                maxTemp = mainJson.getDouble(LIST_ITEM_MAIN_TEMP_MAX);
+                minTemp = mainJson.getDouble(LIST_ITEM_MAIN_TEMP_MIN);
+
+                ContentValues weatherValues = new ContentValues();
+
+                weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_CITY_KEY,
+                        cityId);
+                weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE,
+                        date);
+                weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_WEATHER_ID,
+                        weatherId);
+                weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_WEATHER_DESCRIPTION,
+                        weatherDescription);
+                weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_TEMP_MAX,
+                        maxTemp);
+                weatherValues.put(HourlyWeatherContract.HourlyWeatherEntry.COLUMN_TEMP_MIN,
+                        minTemp);
+
+                contentValuesVector.add(weatherValues);
             }
 
+            // Insert if any values received
+            if (contentValuesVector.size() > 0) {
+                ContentValues[] contentValuesArray = new ContentValues[contentValuesVector.size()];
+                contentValuesVector.toArray(contentValuesArray);
+                getContext().getContentResolver().bulkInsert(
+                        HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
+                        contentValuesArray
+                );
 
+                // delete old data
+                getContext().getContentResolver().delete(
+                        HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI,
+                        HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE + " < ?",
+                        new String[] {Long.toString(System.currentTimeMillis())}
+                );
+
+                getContext().getContentResolver().notifyChange(HourlyWeatherContract.HourlyWeatherEntry.CONTENT_URI, null, false);
+            }
 
         } catch (JSONException e) {
             Log.e(LOG_TAG, e.getMessage(), e);
         }
     }
 
-    public static class City {
-        public int id;
-        public String name;
-        public Coordinates coordinates;
-        public String country;
+    private long addCity(double latitude, double longitude, String cityName, String cityCountry) {
+        long cityId;
+
+        Cursor cityCursor = getContext().getContentResolver().query(
+                HourlyWeatherContract.CityEntry.CONTENT_URI,
+                new String[] {HourlyWeatherContract.CityEntry._ID},
+                HourlyWeatherContract.CityEntry.COLUMN_CITY_LATITUDE + " = ? AND "
+                    + HourlyWeatherContract.CityEntry.COLUMN_CITY_LONGITUDE + " = ?",
+                new String[] {Double.toString(latitude), Double.toString(longitude)},
+                null
+        );
+
+        if (cityCursor != null && cityCursor.moveToFirst()) {
+            int cityIdIndex = cityCursor.getColumnIndex(HourlyWeatherContract.CityEntry._ID);
+            cityId = cityCursor.getLong(cityIdIndex);
+            cityCursor.close();
+        } else {
+            ContentValues cityValues = new ContentValues();
+
+            cityValues.put(HourlyWeatherContract.CityEntry.COLUMN_CITY_LATITUDE, latitude);
+            cityValues.put(HourlyWeatherContract.CityEntry.COLUMN_CITY_LONGITUDE, longitude);
+            cityValues.put(HourlyWeatherContract.CityEntry.COLUMN_CITY_NAME, cityName);
+            cityValues.put(HourlyWeatherContract.CityEntry.COLUMN_CITY_COUNTRY, cityCountry);
+
+            Uri insertedUri = getContext().getContentResolver().insert(
+                    HourlyWeatherContract.CityEntry.CONTENT_URI,
+                    cityValues
+            );
+
+            cityId = ContentUris.parseId(insertedUri);
+        }
+
+        return cityId;
     }
 
-    public static class Coordinates {
-        public float latitude;
-        public float longitude;
+    private static void configurePeriodicSync(Context context, int syncInterval, int flexTime) {
+        Account account = getSyncAccount(context);
+        String authority = context.getString(R.string.content_authority);
+        Bundle bundle = new Bundle();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.KITKAT) {
+            SyncRequest request = new SyncRequest.Builder()
+                    .syncPeriodic(syncInterval, flexTime)
+                    .setSyncAdapter(account, authority)
+                    .setExtras(new Bundle())
+                    .build();
+            ContentResolver.requestSync(request);
+        } else {
+            ContentResolver.addPeriodicSync(account, authority, new Bundle(), syncInterval);
+        }
     }
 
-    public static class HourlyWeather {
-        public Date time;
+    private static Account getSyncAccount(Context context) {
+        AccountManager accountManager =
+                (AccountManager) context.getSystemService(Context.ACCOUNT_SERVICE);
+
+        Account newAccount = new Account(
+                context.getString(R.string.app_name),
+                context.getString(R.string.sync_account_type)
+        );
+
+        if (accountManager.getPassword(newAccount) == null) {
+            if (!accountManager.addAccountExplicitly(newAccount, "", null)) {
+                return null;
+            }
+
+            onAccountCreated(newAccount, context);
+        }
+        return newAccount;
+    }
+
+    private static void onAccountCreated(Account account, Context context) {
+        OpenWeatherApiSyncAdapter.configurePeriodicSync(context, SYNC_INTERVAL, SYNC_FLEXTIME);
+
+        ContentResolver.setSyncAutomatically(account, context.getString(R.string.content_authority), true);
+
+        syncImmediately(context);
     }
 }

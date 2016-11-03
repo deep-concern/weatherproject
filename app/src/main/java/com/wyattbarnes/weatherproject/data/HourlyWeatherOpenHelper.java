@@ -9,7 +9,7 @@ import android.database.sqlite.SQLiteOpenHelper;
  */
 
 public class HourlyWeatherOpenHelper extends SQLiteOpenHelper {
-    private static final int DATABASE_VERSION = 6;
+    private static final int DATABASE_VERSION = 10;
 
     private static final String DATABASE_NAME = "hourlyweather.db";
 
@@ -24,6 +24,7 @@ public class HourlyWeatherOpenHelper extends SQLiteOpenHelper {
                 + HourlyWeatherContract.CityEntry.TABLE_NAME + " ("
                 + HourlyWeatherContract.CityEntry._ID + " INTEGER PRIMARY KEY, "
                 + HourlyWeatherContract.CityEntry.COLUMN_CITY_NAME + " TEXT NOT NULL, "
+                + HourlyWeatherContract.CityEntry.COLUMN_CITY_COUNTRY + " TEXT NOT NULL, "
                 + HourlyWeatherContract.CityEntry.COLUMN_CITY_LATITUDE + " REAL NOT NULL, "
                 + HourlyWeatherContract.CityEntry.COLUMN_CITY_LONGITUDE + " REAL NOT NULL "
                 + " )";
@@ -33,7 +34,7 @@ public class HourlyWeatherOpenHelper extends SQLiteOpenHelper {
                 + HourlyWeatherContract.HourlyWeatherEntry._ID + " INTEGER PRIMARY KEY AUTOINCREMENT, "
                 + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_CITY_KEY + " INTEGER NOT NULL, "
                 + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DATE + " INTEGER NOT NULL, "
-                + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_DESCRIPTION + " TEXT NOT NULL, "
+                + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_WEATHER_DESCRIPTION + " TEXT NOT NULL, "
                 + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_WEATHER_ID + " INTEGER NOT NULL, "
                 + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_TEMP_MAX + " REAL NOT NULL, "
                 + HourlyWeatherContract.HourlyWeatherEntry.COLUMN_TEMP_MIN + " REAL NOT NULL, "

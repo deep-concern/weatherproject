@@ -3,6 +3,8 @@ package com.wyattbarnes.weatherproject;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 
+import com.wyattbarnes.weatherproject.authentication.OpenWeatherApiSyncAdapter;
+
 public class WeatherDetails extends AppCompatActivity {
 
     @Override

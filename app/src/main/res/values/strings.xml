@@ -1,6 +1,14 @@
 <resources>
     <string name="app_name">Weather Project</string>
     <string name="placeholder_current_tempurature">22°</string>
-    <string name="placeholder_high_low_tempurature">26°/19°</string>
+    <string name="placeholder_high_tempurature">26°</string>
+    <string name="placeholder_low_tempurature">19°</string>
+    <string name="placeholder_weather_description">Rainy</string>
     <string name="placeholder_location">New York, US</string>
+    <string name="placeholder_date">2016-10-31 03:00</string>
+    <string name="content_authority">com.wyattbarnes.weatherproject</string>
+    <string name="sync_account_type">weatherproject.wyattbarnes.com</string>
+    <string name="pref_latitude_key">latitude_key</string>
+    <string name="pref_longitude_key">longitude_key</string>
+    <string name="pref_city_id_key">city_id_key</string>
 </resources>

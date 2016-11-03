@@ -1,21 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:tools="http://schemas.android.com/tools"
-    android:orientation="vertical"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     tools:context="com.wyattbarnes.weatherproject.WeatherDetailsFragment">
 
-    <LinearLayout
+    <ListView android:id="@+id/hourlyweather_listview"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:orientation="vertical">
-
-        <TextView
-            android:text="@string/placeholder_location"
-            android:layout_width="match_parent"
-            android:layout_height="wrap_content"
-            android:id="@+id/location_textview" />
-
-    </LinearLayout>
-</LinearLayout>
+        android:layout_height="match_parent"/>
+</FrameLayout>
